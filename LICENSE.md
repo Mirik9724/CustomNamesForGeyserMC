@@ -1,0 +1,1 @@
+https://raw.githubusercontent.com/Mirik9724/Mirik9724/refs/heads/main/LICENSE-Mirik9724%60s-for-code.md

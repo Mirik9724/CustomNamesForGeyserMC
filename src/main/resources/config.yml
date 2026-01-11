@@ -1,0 +1,11 @@
+form:
+  title: CustomNamesForGeyserMC
+  enterNick: Enter your nick
+  example: ElPrimo
+  wrongTitle: Error
+  wrongNick: Please use normal nick
+
+reconnect: Please reconnect to server again
+
+useMetric: true
+checkUpdates: true
