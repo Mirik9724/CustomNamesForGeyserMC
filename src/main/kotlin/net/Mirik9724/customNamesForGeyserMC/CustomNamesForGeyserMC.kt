@@ -2,22 +2,23 @@ package net.Mirik9724.customNamesForGeyserMC
 
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
+import com.velocitypowered.api.event.connection.LoginEvent
+import com.velocitypowered.api.event.connection.PreLoginEvent
 import com.velocitypowered.api.event.player.GameProfileRequestEvent
 import com.velocitypowered.api.event.player.ServerConnectedEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.plugin.Dependency
 import com.velocitypowered.api.plugin.Plugin
-import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.scheduler.ScheduledTask
 import com.velocitypowered.api.util.GameProfile
 import net.Mirik9724.customNamesForGeyserMC.BuildConstants.VERSION
 import net.elytrium.limboapi.api.Limbo
 import net.elytrium.limboapi.api.LimboFactory
+import net.elytrium.limboapi.api.LimboSessionHandler
 import net.elytrium.limboapi.api.chunk.Dimension
 import net.elytrium.limboapi.api.chunk.VirtualWorld
 import net.elytrium.limboapi.api.player.GameMode
-import net.elytrium.limboapi.api.LimboSessionHandler
 import net.kyori.adventure.text.Component
 import org.bstats.charts.SingleLineChart
 import org.bstats.velocity.Metrics
@@ -30,13 +31,12 @@ import java.net.URL
 import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
-import kotlin.math.log
 
 
 @Plugin(
     id = "customnamesforgeysermc",
     name = "CustomNamesForGeyserMC",
-    version = "1.0",
+    version = "1.1",
     authors = ["Mirik9724"],
     dependencies = [
         Dependency(id = "geyser"),
@@ -52,20 +52,17 @@ class CustomNamesForGeyserMC @Inject constructor(
     lateinit var factory: LimboFactory
     lateinit var nwFactory: Limbo
         private set
-    data class LinkingUUID(
-        val uuid: UUID,
-        var fakeNick: String,
-    )
-    private val linkingUUID = mutableListOf<LinkingUUID>()
+    private val linkingUUID = mutableMapOf<UUID, String>()
 
-    private fun isBedrockPlayer(player: Player): Boolean {
+    private fun isBedrockPlayer(uuid: UUID): Boolean {
         val api = GeyserApi.api()
-        return api.isBedrockPlayer(player.uniqueId)
+        return api.isBedrockPlayer(uuid)
     }
 
     private fun isValidNick(checkeNick: String?): Boolean {
         if (checkeNick == null) return false
-        if (checkeNick.length < 3 || checkeNick.length > 16) return false
+        if(data["checkValidNick"] != "true") return true
+        if (checkeNick.length < data["minLength"].toString().toIntOrNull() ?: 3 || checkeNick.length > data["maxLength"].toString().toIntOrNull() ?: 16) return false
         return checkeNick.matches("^[A-Za-z_][A-Za-z0-9_]*$".toRegex())
     }
 
@@ -99,6 +96,13 @@ class CustomNamesForGeyserMC @Inject constructor(
         nickWorld?.setBlock(0, 64, -1, emptyBlock)
 
         nwFactory = factory.createLimbo(nickWorld).setName("nickWorld").setGameMode(GameMode.ADVENTURE)
+    }
+
+    private fun genTempNick(): String {
+        return "CNFGTemp" + UUID.randomUUID().toString().substring(0, 8)
+    }
+    private fun genTempUUID(nick: String): UUID {
+        return UUID.nameUUIDFromBytes(nick.toByteArray())
     }
 
 
@@ -147,7 +151,7 @@ class CustomNamesForGeyserMC @Inject constructor(
         if(data.getByPath("checkUpdates") == "true") {
             val url = "https://raw.githubusercontent.com/Mirik9724/CustomNamesForGeyserMC/refs/heads/master/VERSION"
             val version: String = try {
-                URL(url).readText().trim() // читаем весь файл и убираем пробелы/переводы строк
+                URL(url).readText().trim()
             } catch (e: Exception) {
                 "unknown"
             }
@@ -174,10 +178,11 @@ class CustomNamesForGeyserMC @Inject constructor(
     fun onPlayerConnect(event: ServerConnectedEvent) {
         val player = event.player
 
-        if (isBedrockPlayer(player)) {
-            if (linkingUUID.find { it.uuid == player.uniqueId } != null) {
+        if (isBedrockPlayer(player.uniqueId)) {
+            if (linkingUUID.containsKey(player.uniqueId)) {
                 return
             }
+
             server.scheduler.buildTask(this@CustomNamesForGeyserMC, Consumer<ScheduledTask> { task ->
                 nwFactory.spawnPlayer(player, object : LimboSessionHandler{})
             }).delay(50, TimeUnit.MILLISECONDS).schedule()
@@ -206,9 +211,7 @@ class CustomNamesForGeyserMC @Inject constructor(
                         GeyserApi.api().sendForm(player.uniqueId, wrongNick)
                     }
                     else {
-                        linkingUUID.add(
-                            LinkingUUID(player.uniqueId, newNick!!)
-                        )
+                        linkingUUID[player.uniqueId] = newNick!!
                         player.disconnect(Component.text(data.getByPath("reconnect")))
                     }
                 }
@@ -223,21 +226,20 @@ class CustomNamesForGeyserMC @Inject constructor(
     fun onGameProfileRequest(event: GameProfileRequestEvent) {
         val profile = event.gameProfile
         val origUUID = profile.id
+        val origName = profile.name
 
-        val foundNick = linkingUUID.find { it.uuid == origUUID }?.fakeNick
-        if (foundNick != null) {
-            val newProfile = GameProfile(
-                genUUID(foundNick),
-                foundNick,
-                emptyList()
-            )
-//            GeyserApi.api().
+        if (isBedrockPlayer(origUUID) == false) { return }
+        val foundNick = linkingUUID[origUUID] ?: return
 
-//            GeyserApi.api().entry.setName(foundNick);
-
-            event.setGameProfile(newProfile)
-            linkingUUID.removeIf { it.uuid == origUUID }
-//            logger.info("Removed linking uuid")
-        }
+        val newProfile = GameProfile(
+            genUUID(foundNick),
+            foundNick,
+            emptyList()
+        )
+        event.setGameProfile(newProfile)
+        linkingUUID.remove(origUUID)
+        logger.info("BE-${origName}; JE-${foundNick}")
     }
+
 }
+//ConnectionRequestEvent

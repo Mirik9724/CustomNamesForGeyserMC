@@ -13,4 +13,15 @@ checkUpdates: true
 version:
   new: pls download new plugin version https://github.com/Mirik9724/CustomNamesForGeyserMC/releases
   noFound: You use a latest version
-  er: Wr cann`t check of updates
+  er: We can't check for updates
+
+
+checkValidNick: true
+#use 1-3, default is 3
+minLength: 3
+# If m.L. is ≥ 16, Minecraft correctly handles such nicknames; otherwise, it does not."
+maxLength: 16
+
+# Currently has no effect
+# Will be deleted
+useTempNicks: false
