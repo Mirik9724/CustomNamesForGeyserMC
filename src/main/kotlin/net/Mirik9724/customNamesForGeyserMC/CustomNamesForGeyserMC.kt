@@ -1,9 +1,8 @@
 package net.Mirik9724.customNamesForGeyserMC
 
 import com.google.inject.Inject
+import com.velocitypowered.api.event.ResultedEvent
 import com.velocitypowered.api.event.Subscribe
-import com.velocitypowered.api.event.connection.LoginEvent
-import com.velocitypowered.api.event.connection.PreLoginEvent
 import com.velocitypowered.api.event.player.GameProfileRequestEvent
 import com.velocitypowered.api.event.player.ServerConnectedEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
@@ -29,7 +28,6 @@ import net.kyori.adventure.text.Component
 import org.geysermc.cumulus.form.CustomForm
 import org.geysermc.geyser.api.GeyserApi
 import org.slf4j.Logger
-import org.yaml.snakeyaml.Yaml
 import java.io.File
 import java.net.URL
 import java.util.*
@@ -45,7 +43,8 @@ import java.util.function.Consumer
     dependencies = [
         Dependency(id = "geyser"),
         Dependency(id = "limboapi"),
-        Dependency(id = "mirikapi")
+        Dependency(id = "mirikapi"),
+        Dependency(id = "whitelist-ultra", optional = true)
     ]
 )
 class CustomNamesForGeyserMC @Inject constructor(
@@ -61,6 +60,7 @@ class CustomNamesForGeyserMC @Inject constructor(
     lateinit var nwFactory: Limbo
         private set
     private val linkingUUID = mutableMapOf<UUID, String>()
+    var wluInstaled = false
 
     private fun isBedrockPlayer(uuid: UUID): Boolean {
         val api = GeyserApi.api()
@@ -111,7 +111,7 @@ class CustomNamesForGeyserMC @Inject constructor(
 
         tryCreatePath(File(pth))
         copyFileFromJar(conf, pth, this.javaClass.classLoader)
-        updateYmlFromJar(conf, "plugins/whitelist_ultra/" + conf, this::class.java.classLoader)
+        updateYmlFromJar(conf, "plugins/CustomNamesForGeyserMC/" + conf, this.javaClass.classLoader)
 
         data = loadYmlFile(pth+ conf)
 
@@ -156,6 +156,7 @@ class CustomNamesForGeyserMC @Inject constructor(
             logger.info("Version: " + version)
         }
 
+        wluInstaled = server.pluginManager.getPlugin("whitelist-ultra").isPresent
 
         logger.info(data["form.example"])
         logger.info("ON")
@@ -168,6 +169,12 @@ class CustomNamesForGeyserMC @Inject constructor(
 
         if (isBedrockPlayer(player.uniqueId)) {
             if (linkingUUID.containsKey(player.uniqueId)) {
+                linkingUUID.remove(player.uniqueId)
+                if(wluInstaled == true){
+                    if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username) == false){
+                        player.disconnect(net.Mirik9724.api.toMM(net.Mirik9724.whitelist_ultra.WLUCore.gT("kick")))
+                    }
+                }
                 return
             }
 
@@ -195,6 +202,7 @@ class CustomNamesForGeyserMC @Inject constructor(
                 .input(data["form.enterNick"]!!, data["form.example"]!!)
                 .validResultHandler { response ->
                     val newNick: String? = response.next() as? String
+
                     if (isValidNick(newNick) == false) {
                         GeyserApi.api().sendForm(player.uniqueId, wrongNick)
                     }
@@ -208,15 +216,24 @@ class CustomNamesForGeyserMC @Inject constructor(
                 })
             GeyserApi.api().sendForm(player.uniqueId, nickForm)
         }
+        else{
+            if(wluInstaled == true){
+                if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username) == false){
+                    player.disconnect(net.Mirik9724.api.toMM(net.Mirik9724.whitelist_ultra.WLUCore.gT("kick")))
+                }
+            }
+        }
     }
 
     @Subscribe
     fun onGameProfileRequest(event: GameProfileRequestEvent) {
         val profile = event.gameProfile
         val origUUID = profile.id
-        val origName = profile.name
 
         if (isBedrockPlayer(origUUID) == false) { return }
+
+        val origName = profile.name
+
         val foundNick = linkingUUID[origUUID] ?: return
 
         val newProfile = GameProfile(
@@ -225,7 +242,7 @@ class CustomNamesForGeyserMC @Inject constructor(
             emptyList()
         )
         event.setGameProfile(newProfile)
-        linkingUUID.remove(origUUID)
+//        linkingUUID.remove(origUUID)
         logger.info("BE-${origName}; JE-${foundNick}")
     }
 
