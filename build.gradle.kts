@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "net.Mirik9724"
-version = "1.1.3"
+version = "1.1.4"
 
 repositories {
     mavenCentral()
@@ -44,10 +44,7 @@ tasks {
     }
 }
 
-val targetJavaVersion = 17
-kotlin {
-    jvmToolchain(targetJavaVersion)
-}
+//kotlin { jvmToolchain(17) }
 
 val templateSource = file("src/main/templates")
 val templateDest = layout.buildDirectory.dir("generated/sources/templates")

@@ -1,7 +1,6 @@
 package net.Mirik9724.customNamesForGeyserMC
 
 import com.google.inject.Inject
-import com.velocitypowered.api.event.ResultedEvent
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.player.GameProfileRequestEvent
 import com.velocitypowered.api.event.player.ServerConnectedEvent
@@ -14,6 +13,7 @@ import com.velocitypowered.api.util.GameProfile
 import net.Mirik9724.api.bstats.charts.SingleLineChart
 import net.Mirik9724.api.bstats.velocity.Metrics
 import net.Mirik9724.api.copyFileFromJar
+import net.Mirik9724.api.isAvailableNewVersion
 import net.Mirik9724.api.loadYmlFile
 import net.Mirik9724.api.tryCreatePath
 import net.Mirik9724.api.updateYmlFromJar
@@ -29,7 +29,6 @@ import org.geysermc.cumulus.form.CustomForm
 import org.geysermc.geyser.api.GeyserApi
 import org.slf4j.Logger
 import java.io.File
-import java.net.URL
 import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
@@ -137,23 +136,12 @@ class CustomNamesForGeyserMC @Inject constructor(
         }
 
         if(data["checkUpdates"] == "true") {
-            val url = "https://raw.githubusercontent.com/Mirik9724/CustomNamesForGeyserMC/refs/heads/master/VERSION"
-            val version: String = try {
-                URL(url).readText().trim()
-            } catch (e: Exception) {
-                "unknown"
-            }
-
-            if(VERSION != version){
+            if(isAvailableNewVersion("https://raw.githubusercontent.com/Mirik9724/CustomNamesForGeyserMC/refs/heads/master/VERSION", VERSION)){
                 logger.info(data["version.new"])
             }
             else{
                 logger.info(data["version.noFound"])
             }
-            if(version == "unknown"){
-                logger.warn(data["version.er"])
-            }
-            logger.info("Version: " + version)
         }
 
         wluInstaled = server.pluginManager.getPlugin("whitelist-ultra").isPresent
