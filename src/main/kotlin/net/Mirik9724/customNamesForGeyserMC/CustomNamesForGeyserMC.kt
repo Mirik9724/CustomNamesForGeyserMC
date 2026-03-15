@@ -23,6 +23,7 @@ import net.elytrium.limboapi.api.LimboFactory
 import net.elytrium.limboapi.api.LimboSessionHandler
 import net.elytrium.limboapi.api.chunk.Dimension
 import net.elytrium.limboapi.api.chunk.VirtualWorld
+import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import net.elytrium.limboapi.api.player.GameMode
 import net.kyori.adventure.text.Component
 import org.geysermc.cumulus.form.CustomForm
@@ -151,8 +152,13 @@ class CustomNamesForGeyserMC @Inject constructor(
 
     }
 
+//    @Subscribe
+//    fun onLoginLimboRegister(event: LoginLimboRegisterEvent) {
+//
+//    }
+
     @Subscribe
-    fun onPlayerConnect(event: ServerConnectedEvent) {
+    fun onLoginLimboRegister(event: LoginLimboRegisterEvent) {
         val player = event.player
 
         if (isBedrockPlayer(player.uniqueId)) {
@@ -166,9 +172,14 @@ class CustomNamesForGeyserMC @Inject constructor(
                 return
             }
 
-            server.scheduler.buildTask(this@CustomNamesForGeyserMC, Consumer<ScheduledTask> { task ->
-                nwFactory.spawnPlayer(player, object : LimboSessionHandler{})
-            }).delay(50, TimeUnit.MILLISECONDS).schedule()
+            event.addOnJoinCallback {
+                val player = event.player
+                nwFactory.spawnPlayer(player, object : LimboSessionHandler {})
+            }
+
+//            server.scheduler.buildTask(this@CustomNamesForGeyserMC, Consumer<ScheduledTask> { task ->
+//                nwFactory.spawnPlayer(player, object : LimboSessionHandler{})
+//            }).delay(50, TimeUnit.MILLISECONDS).schedule()
 
             lateinit var wrongNick: CustomForm
             lateinit var nickForm: CustomForm.Builder
