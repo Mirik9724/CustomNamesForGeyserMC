@@ -27,6 +27,7 @@ import net.elytrium.limboapi.api.event.LoginLimboRegisterEvent
 import net.elytrium.limboapi.api.player.GameMode
 import net.kyori.adventure.text.Component
 import org.geysermc.cumulus.form.CustomForm
+import org.geysermc.cumulus.form.SimpleForm
 import org.geysermc.geyser.api.GeyserApi
 import org.slf4j.Logger
 import java.io.File
@@ -85,14 +86,29 @@ class CustomNamesForGeyserMC @Inject constructor(
             0f, 0f
         )
 
-        val emptyBlock = factory.createSimpleBlock("minecraft:barrier")
+        val block = factory.createSimpleBlock("minecraft:barrier")
 
-        nickWorld?.setBlock(0, 63, 0, emptyBlock)
-        nickWorld?.setBlock(0, 66, 0, emptyBlock)
-        nickWorld?.setBlock(0, 64, 1, emptyBlock)
-        nickWorld?.setBlock(1, 64, 0, emptyBlock)
-        nickWorld?.setBlock(-1, 64, 0, emptyBlock)
-        nickWorld?.setBlock(0, 64, -1, emptyBlock)
+        nickWorld!!.setBlock(0, 63, 0, block)
+
+        nickWorld!!.setBlock(0, 64, 1, block)
+        nickWorld!!.setBlock(1, 64, 0, block)
+        nickWorld!!.setBlock(-1, 64, 0, block)
+        nickWorld!!.setBlock(0, 64, -1, block)
+        nickWorld!!.setBlock(1, 64, -1, block)
+        nickWorld!!.setBlock(1, 64, 1, block)
+        nickWorld!!.setBlock(-1, 64, 1, block)
+        nickWorld!!.setBlock(-1, 64, -1, block)
+
+        nickWorld!!.setBlock(0, 65, 1, block)
+        nickWorld!!.setBlock(1, 65, 0, block)
+        nickWorld!!.setBlock(-1, 65, 0, block)
+        nickWorld!!.setBlock(0, 65, -1, block)
+        nickWorld!!.setBlock(1, 65, -1, block)
+        nickWorld!!.setBlock(1, 65, 1, block)
+        nickWorld!!.setBlock(-1, 65, 1, block)
+        nickWorld!!.setBlock(-1, 65, -1, block)
+
+        nickWorld!!.setBlock(0, 66, 0, block)
 
         nwFactory = factory.createLimbo(nickWorld).setName("nickWorld").setGameMode(GameMode.ADVENTURE)
     }
@@ -165,7 +181,7 @@ class CustomNamesForGeyserMC @Inject constructor(
             if (linkingUUID.containsKey(player.uniqueId)) {
                 linkingUUID.remove(player.uniqueId)
                 if(wluInstaled == true){
-                    if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username) == false){
+                    if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username.toString()) == false){
                         player.disconnect(net.Mirik9724.api.toMM(net.Mirik9724.whitelist_ultra.WLUCore.gT("kick")))
                     }
                 }
@@ -175,14 +191,11 @@ class CustomNamesForGeyserMC @Inject constructor(
             event.addOnJoinCallback {
                 val player = event.player
                 nwFactory.spawnPlayer(player, object : LimboSessionHandler {})
-            }
 
-//            server.scheduler.buildTask(this@CustomNamesForGeyserMC, Consumer<ScheduledTask> { task ->
-//                nwFactory.spawnPlayer(player, object : LimboSessionHandler{})
-//            }).delay(50, TimeUnit.MILLISECONDS).schedule()
 
             lateinit var wrongNick: CustomForm
             lateinit var nickForm: CustomForm.Builder
+            lateinit var newOrOld: SimpleForm
 
             wrongNick = CustomForm.builder()
                 .title(data["form.wrongTitle"]!!)
@@ -213,11 +226,38 @@ class CustomNamesForGeyserMC @Inject constructor(
                 .closedResultHandler(Runnable{
                     GeyserApi.api().sendForm(player.uniqueId, nickForm)
                 })
-            GeyserApi.api().sendForm(player.uniqueId, nickForm)
-        }
+
+            newOrOld = SimpleForm.builder()
+                .title(data["form.title"]!!)
+                .content(data["form.enterNick"]!!)
+                .button(data["newNick"]!!)
+                .button(data["oldNick"]!!)
+                .validResultHandler { response ->
+                    val clicked = response.clickedButtonId()
+
+                    when (clicked) {
+                        0 -> {
+                            GeyserApi.api().sendForm(player.uniqueId, nickForm)
+                        }
+                        1 -> {
+                            linkingUUID[player.uniqueId] = player.username.toString()
+
+                            player.disconnect(Component.text(data["reconnect"]!!))
+//                            factory.passLoginLimbo(player)
+                        }
+                    }
+                }
+                .closedResultHandler(Runnable {
+                    GeyserApi.api().sendForm(player.uniqueId, newOrOld)
+                })
+                .build()
+
+
+            GeyserApi.api().sendForm(player.uniqueId, newOrOld)
+        }}
         else{
             if(wluInstaled == true){
-                if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username) == false){
+                if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username.toString()) == false){
                     player.disconnect(net.Mirik9724.api.toMM(net.Mirik9724.whitelist_ultra.WLUCore.gT("kick")))
                 }
             }

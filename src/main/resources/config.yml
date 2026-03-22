@@ -25,3 +25,6 @@ maxLength: 16
 # Currently has no effect
 # Will be deleted
 useTempNicks: false
+
+newNick: "Use difrent nick"
+oldNick: "Use this nick"
