@@ -3,12 +3,10 @@ package net.Mirik9724.customNamesForGeyserMC
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.player.GameProfileRequestEvent
-import com.velocitypowered.api.event.player.ServerConnectedEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.plugin.Dependency
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
 import com.velocitypowered.api.util.GameProfile
 import net.Mirik9724.api.bstats.charts.SingleLineChart
 import net.Mirik9724.api.bstats.velocity.Metrics
@@ -33,7 +31,6 @@ import org.slf4j.Logger
 import java.io.File
 import java.util.*
 import java.util.concurrent.TimeUnit
-import java.util.function.Consumer
 
 
 @Plugin(
@@ -50,7 +47,7 @@ import java.util.function.Consumer
 )
 class CustomNamesForGeyserMC @Inject constructor(
     private val server: ProxyServer,
-    private val logger: Logger,
+    val logger: Logger,
     private val metricsFactory: Metrics.Factory
 ) {
     val pth = "plugins/CustomNamesForGeyserMC/"
@@ -59,13 +56,23 @@ class CustomNamesForGeyserMC @Inject constructor(
     lateinit var data: Map<String, String>
     lateinit var factory: LimboFactory
     lateinit var nwFactory: Limbo
-        private set
-    private val linkingUUID = mutableMapOf<UUID, String>()
+    val linkingXUID = mutableMapOf<String, String>()
+    val originalNames = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+
     var wluInstaled = false
 
     private fun isBedrockPlayer(uuid: UUID): Boolean {
         val api = GeyserApi.api()
         return api.isBedrockPlayer(uuid)
+    }
+
+    companion object {
+        val instanceRef = java.util.concurrent.atomic.AtomicReference<CustomNamesForGeyserMC?>(null)
+
+        val instance: CustomNamesForGeyserMC
+            get() = instanceRef.get() as? CustomNamesForGeyserMC
+                ?: throw IllegalStateException("Plugin in not ON!")
     }
 
     private fun isValidNick(checkeNick: String?): Boolean {
@@ -113,23 +120,46 @@ class CustomNamesForGeyserMC @Inject constructor(
         nwFactory = factory.createLimbo(nickWorld).setName("nickWorld").setGameMode(GameMode.ADVENTURE)
     }
 
-    private fun genTempNick(): String {
+    fun genTempNick(): String {
         return "CNFGTemp" + UUID.randomUUID().toString().substring(0, 8)
     }
     private fun genTempUUID(nick: String): UUID {
         return UUID.nameUUIDFromBytes(nick.toByteArray())
     }
 
-
     @Subscribe
     fun onProxyInitialization(event: ProxyInitializeEvent) {
         logger.info("Starting")
+        instanceRef.set(this)
 
         tryCreatePath(File(pth))
         copyFileFromJar(conf, pth, this.javaClass.classLoader)
         updateYmlFromJar(conf, "plugins/CustomNamesForGeyserMC/" + conf, this.javaClass.classLoader)
 
         data = loadYmlFile(pth+ conf)
+
+
+        server.scheduler.buildTask(this, Runnable {
+            try {
+                logger.info("Starting delayed inject in GeyserMC...")
+
+                net.bytebuddy.agent.ByteBuddyAgent.install()
+                val geyserPlugin = server.pluginManager.getPlugin("geyser").orElse(null)
+                val classLoader = geyserPlugin?.instance?.javaClass?.classLoader
+                    ?: this.javaClass.classLoader
+
+                net.bytebuddy.agent.builder.AgentBuilder.Default()
+                    .type(net.bytebuddy.matcher.ElementMatchers.named("org.geysermc.geyser.session.auth.AuthData"))
+                    .transform { builder, _, _, _, _ ->
+                        builder.method(net.bytebuddy.matcher.ElementMatchers.named("name"))
+                            .intercept(net.bytebuddy.implementation.MethodDelegation.to(GeyserNameInterceptor::class.java))
+                    }.installOnByteBuddyAgent()
+
+                logger.info("GeyserMC was successfully injected after delay!")
+            } catch (e: Exception) {
+                logger.error("Fatal error in delayed inject GeyserMC: ", e)
+            }
+        }).delay(3, TimeUnit.SECONDS).schedule()
 
         logger.info("OK Config")
 
@@ -146,7 +176,7 @@ class CustomNamesForGeyserMC @Inject constructor(
 
             metrics.addCustomChart(
                 SingleLineChart("linked players") {
-                    linkingUUID.size
+                    linkingXUID.size
                 }
             )
             logger.info("ON Metrics")
@@ -168,18 +198,16 @@ class CustomNamesForGeyserMC @Inject constructor(
 
     }
 
-//    @Subscribe
-//    fun onLoginLimboRegister(event: LoginLimboRegisterEvent) {
-//
-//    }
-
     @Subscribe
     fun onLoginLimboRegister(event: LoginLimboRegisterEvent) {
         val player = event.player
-
         if (isBedrockPlayer(player.uniqueId)) {
-            if (linkingUUID.containsKey(player.uniqueId)) {
-                linkingUUID.remove(player.uniqueId)
+            val geyserConnection = GeyserApi.api().connectionByUuid(player.uniqueId)
+            val xuid = geyserConnection?.xuid()
+
+            if (xuid != null && linkingXUID.containsKey(xuid)) {
+                linkingXUID.remove(xuid)
+
                 if(wluInstaled == true){
                     if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username.toString()) == false){
                         player.disconnect(net.Mirik9724.api.toMM(net.Mirik9724.whitelist_ultra.WLUCore.gT("kick")))
@@ -187,74 +215,97 @@ class CustomNamesForGeyserMC @Inject constructor(
                 }
                 return
             }
+            else{
 
-            event.addOnJoinCallback {
-                val player = event.player
-                nwFactory.spawnPlayer(player, object : LimboSessionHandler {})
+                event.addOnJoinCallback {
+                    val player = event.player
+                    nwFactory.spawnPlayer(player, object : LimboSessionHandler {})}
 
+                lateinit var wrongNick: CustomForm
+                lateinit var nickForm: CustomForm.Builder
+                lateinit var newOrOld: SimpleForm
 
-            lateinit var wrongNick: CustomForm
-            lateinit var nickForm: CustomForm.Builder
-            lateinit var newOrOld: SimpleForm
-
-            wrongNick = CustomForm.builder()
-                .title(data["form.wrongTitle"]!!)
-                .label(data["form.wrongNick"]!!)
-                .validResultHandler {
-                    GeyserApi.api().sendForm(player.uniqueId, nickForm)
-                }
-                .closedResultHandler(Runnable{
-                    GeyserApi.api().sendForm(player.uniqueId, wrongNick)
-                })
-                .build()
-
-
-            nickForm = CustomForm.builder()
-                .title(data["form.title"]!!)
-                .input(data["form.enterNick"]!!, data["form.example"]!!)
-                .validResultHandler { response ->
-                    val newNick: String? = response.next() as? String
-
-                    if (isValidNick(newNick) == false) {
+                wrongNick = CustomForm.builder()
+                    .title(data["form.wrongTitle"]!!)
+                    .label(data["form.wrongNick"]!!)
+                    .validResultHandler {
+                        GeyserApi.api().sendForm(player.uniqueId, nickForm)
+                    }
+                    .closedResultHandler(Runnable{
                         GeyserApi.api().sendForm(player.uniqueId, wrongNick)
-                    }
-                    else {
-                        linkingUUID[player.uniqueId] = newNick!!
-                        player.disconnect(Component.text(data["reconnect"]!!))
-                    }
-                }
-                .closedResultHandler(Runnable{
-                    GeyserApi.api().sendForm(player.uniqueId, nickForm)
-                })
+                    })
+                    .build()
 
-            newOrOld = SimpleForm.builder()
-                .title(data["form.title"]!!)
-                .content(data["form.enterNick"]!!)
-                .button(data["newNick"]!!)
-                .button(data["oldNick"]!!)
-                .validResultHandler { response ->
-                    val clicked = response.clickedButtonId()
+                    nickForm = CustomForm.builder()
+                        .title(data["form.title"]!!)
+                        .input(data["form.enterNick"]!!, data["form.example"]!!)
+                        .validResultHandler { response ->
+                            val newNick = response.next() as? String
 
-                    when (clicked) {
-                        0 -> {
-                            GeyserApi.api().sendForm(player.uniqueId, nickForm)
+                            if (isValidNick(newNick) == false) {
+                                GeyserApi.api().sendForm(player.uniqueId, wrongNick)
+                            } else {
+                                val geyserConnection = GeyserApi.api().connectionByUuid(player.uniqueId)
+                                val xuid = geyserConnection?.xuid()
+
+                                if (xuid != null) {
+                                    linkingXUID[xuid] = newNick!!
+                                    player.disconnect(Component.text(data["reconnect"]!!))
+                                } else {
+                                    player.disconnect(Component.text("Wrong Xbox ID!"))
+                                }
+                            }
                         }
-                        1 -> {
-                            linkingUUID[player.uniqueId] = player.username.toString()
 
-                            player.disconnect(Component.text(data["reconnect"]!!))
-//                            factory.passLoginLimbo(player)
+                    newOrOld = SimpleForm.builder()
+                    .title(data["form.title"]!!)
+                    .content(data["form.enterNick"]!!)
+                    .button(data["newNick"]!!)
+                    .button(data["oldNick"]!!)
+                    .validResultHandler { response ->
+                        val clicked = response.clickedButtonId()
+
+                        when (clicked) {
+                            0 -> {
+                                GeyserApi.api().sendForm(player.uniqueId, nickForm)
+                            }
+                            1 -> {
+                                if (xuid != null) {
+                                    val realXboxName = originalNames[xuid]
+
+                                    if (realXboxName != null) {
+                                        val isNameTaken = server.getPlayer(realXboxName).isPresent
+
+                                        if (isNameTaken) {
+                                            val msgNameTaken = data["form.nameTaken"]!!
+                                            player.disconnect(Component.text(msgNameTaken))
+                                        } else {
+                                            linkingXUID[xuid] = realXboxName
+                                            logger.info("Player chose original name. Retrieved from cache: XUID $xuid -> $realXboxName")
+                                            originalNames.remove(xuid)
+
+                                            val msgReconnect = data["reconnect"]!!
+                                            player.disconnect(Component.text(msgReconnect))
+                                        }
+                                    } else {
+                                        val msgCacheError = data["form.cacheError"]!!
+                                        player.disconnect(Component.text(msgCacheError))
+                                    }
+                                } else {
+                                    val msgXuidError = data["form.xuidError"]!!
+                                    player.disconnect(Component.text(msgXuidError))
+                                }
+                            }
                         }
                     }
-                }
-                .closedResultHandler(Runnable {
-                    GeyserApi.api().sendForm(player.uniqueId, newOrOld)
-                })
-                .build()
+                    .closedResultHandler(Runnable {
+                        GeyserApi.api().sendForm(player.uniqueId, newOrOld)
+                    })
+                    .build()
 
 
-            GeyserApi.api().sendForm(player.uniqueId, newOrOld)
-        }}
+                GeyserApi.api().sendForm(player.uniqueId, newOrOld)
+            }}
         else{
             if(wluInstaled == true){
                 if(net.Mirik9724.whitelist_ultra.Velocity.VelocityPlayerLoginListener.instance.check(player.username.toString()) == false){
@@ -271,9 +322,10 @@ class CustomNamesForGeyserMC @Inject constructor(
 
         if (isBedrockPlayer(origUUID) == false) { return }
 
-        val origName = profile.name
+        val geyserConnection = GeyserApi.api().connectionByUuid(origUUID)
+        val xuid = geyserConnection?.xuid() ?: return
 
-        val foundNick = linkingUUID[origUUID] ?: return
+        val foundNick = linkingXUID[xuid] ?: return
 
         val newProfile = GameProfile(
             genUUID(foundNick),
@@ -281,9 +333,5 @@ class CustomNamesForGeyserMC @Inject constructor(
             emptyList()
         )
         event.setGameProfile(newProfile)
-//        linkingUUID.remove(origUUID)
-        logger.info("BE-${origName}; JE-${foundNick}")
     }
-
 }
-//ConnectionRequestEvent

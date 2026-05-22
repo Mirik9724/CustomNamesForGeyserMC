@@ -4,6 +4,10 @@ form:
   example: ElPrimo
   wrongTitle: Error
   wrongNick: Please use normal nick
+  nameTaken: "This nickname is already taken by an online player! Please choose another one."
+  cacheError: "Error: Failed to find your original nickname in the cache!"
+  xuidError: "Error: Failed to retrieve your Xbox XUID!"
+
 
 reconnect: Please reconnect to server again
 

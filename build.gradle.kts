@@ -10,7 +10,7 @@ plugins {
 }
 
 group = "net.Mirik9724"
-version = "1.1.6"
+version = "1.1.7"
 
 repositories {
     mavenCentral()
@@ -30,9 +30,11 @@ repositories {
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     kapt("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     compileOnly("org.geysermc.geyser:api:2.9.0-SNAPSHOT")
     compileOnly("net.elytrium.limboapi:api:1.1.26")
+
+    implementation("net.bytebuddy:byte-buddy:1.14.12")
+    implementation("net.bytebuddy:byte-buddy-agent:1.14.12")
 
     compileOnly("com.github.Mirik9724:MirikAPI:v0.1.5.10")
     compileOnly(files("libs/WLU.jar"))
